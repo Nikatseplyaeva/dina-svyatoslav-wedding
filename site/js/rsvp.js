@@ -85,20 +85,41 @@
     form.hidden = false;
   });
 
+  function formatMessage(p) {
+    const lines = [
+      '🎎 <b>Новый RSVP</b>',
+      '',
+      `<b>Имя:</b> ${escapeHtml(p.name || '—')}`,
+      `<b>Придёт:</b> ${p.attend === 'yes' ? 'Да, буду' : 'Не смогу'}`,
+      `<b>Гостей:</b> ${escapeHtml(p.guests || '—')}`,
+      `<b>Напитки:</b> ${p.drinks.length ? escapeHtml(p.drinks.join(', ')) : '—'}`,
+      `<b>Блюдо:</b> ${p.dish ? escapeHtml(p.dish) : '—'}`,
+    ];
+    return lines.join('\n');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  }
+
   async function sendRsvp(payload) {
-    const endpoint = window.RSVP_ENDPOINT;
-    if (!endpoint || endpoint.startsWith('PASTE_')) {
-      throw new Error('RSVP endpoint is not configured (see js/config.js)');
+    const token = window.TELEGRAM_BOT_TOKEN;
+    const chatId = window.TELEGRAM_CHAT_ID;
+    if (!token || token.startsWith('PASTE_') || !chatId || String(chatId).startsWith('PASTE_')) {
+      throw new Error('Telegram bot is not configured (see js/config.js)');
     }
-    // Google Apps Script Web Apps don't return browser-readable CORS headers,
-    // so we fire the request in no-cors mode and treat a network-level
-    // success (no thrown error) as delivered. text/plain avoids a CORS
-    // preflight, which Apps Script does not handle.
-    await fetch(endpoint, {
+
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: formatMessage(payload),
+        parse_mode: 'HTML',
+      }),
     });
+
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.description || 'Telegram API error');
   }
 })();
