@@ -1,4 +1,4 @@
 // Telegram bot credentials for RSVP notifications.
 // See ../telegram-bot/README.md for setup steps.
 window.TELEGRAM_BOT_TOKEN = '8859443090:AAGnkTd0JeMyEysgXnvHREiW9CpFVejqADs';
-window.TELEGRAM_CHAT_IDS = ['689587636', '1975330210'];
+window.TELEGRAM_CHAT_IDS = '1975330210';
