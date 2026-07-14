@@ -109,16 +109,19 @@
       throw new Error('Telegram bot is not configured (see js/config.js)');
     }
 
-    // A POST with a JSON body triggers a CORS preflight (OPTIONS) that the
-    // Telegram Bot API doesn't handle, which silently blocks the request.
-    // A plain GET with query params is a CORS "simple request" — no
-    // preflight — and is what we already confirmed works from a browser.
-    const url = new URL(`https://api.telegram.org/bot${token}/sendMessage`);
-    url.searchParams.set('chat_id', chatId);
-    url.searchParams.set('text', formatMessage(payload));
-    url.searchParams.set('parse_mode', 'HTML');
-
-    const res = await fetch(url);
+    // Content-Type: application/json triggers a CORS preflight (OPTIONS)
+    // that the Telegram Bot API doesn't handle, which silently blocks the
+    // request. text/plain is a CORS "simple request" content type, so no
+    // preflight happens — Telegram still parses the body as JSON either way.
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: formatMessage(payload),
+        parse_mode: 'HTML',
+      }),
+    });
     const data = await res.json();
     if (!data.ok) throw new Error(data.description || 'Telegram API error');
   }
