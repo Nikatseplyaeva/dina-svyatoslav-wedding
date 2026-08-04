@@ -84,48 +84,34 @@
     form.hidden = false;
   });
 
-  function formatMessage(p) {
-    const lines = [
-      '🎎 <b>Новый RSVP</b>',
-      '',
-      `<b>Имя:</b> ${escapeHtml(p.name || '—')}`,
-      `<b>Придёт:</b> ${p.attend === 'yes' ? 'Да, буду' : 'Не смогу'}`,
-      `<b>Напитки:</b> ${p.drinks.length ? escapeHtml(p.drinks.join(', ')) : '—'}`,
-      `<b>Блюдо:</b> ${p.dish ? escapeHtml(p.dish) : '—'}`,
-    ];
-    return lines.join('\n');
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-  }
-
-  async function sendToChat(token, chatId, text) {
-    // A JSON POST body needs Content-Type: application/json to be parsed by
-    // Telegram, but that header triggers a CORS preflight the API doesn't
-    // handle. A GET with query params avoids preflight entirely (no custom
-    // headers) and is the form we already confirmed works from a browser.
-    const url = new URL(`https://api.telegram.org/bot${token}/sendMessage`);
-    url.searchParams.set('chat_id', chatId);
-    url.searchParams.set('text', text);
-    url.searchParams.set('parse_mode', 'HTML');
-
-    const res = await fetch(url);
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.description || 'Telegram API error');
-  }
-
   async function sendRsvp(payload) {
-    const token = window.TELEGRAM_BOT_TOKEN;
-    const chatIds = window.TELEGRAM_CHAT_IDS;
-    if (!token || token.startsWith('PASTE_') || !Array.isArray(chatIds) || !chatIds.length) {
-      throw new Error('Telegram bot is not configured (see js/config.js)');
+    const relayUrl = window.RSVP_RELAY_URL;
+    if (!relayUrl || relayUrl.startsWith('PASTE_')) {
+      throw new Error('RSVP relay is not configured (see js/config.js)');
     }
 
-    const text = formatMessage(payload);
-    const results = await Promise.allSettled(chatIds.map((id) => sendToChat(token, id, text)));
-    const allFailed = results.every((r) => r.status === 'rejected');
-    if (allFailed) throw results[0].reason;
-    results.forEach((r) => { if (r.status === 'rejected') console.warn('RSVP delivery failed for one recipient:', r.reason); });
+    // Some guests' networks block api.telegram.org directly, so the actual
+    // Telegram delivery happens server-side in a Cloudflare Worker (see
+    // cloudflare-worker/README.md) — the guest's browser only needs to
+    // reach Cloudflare, which is far more consistently reachable.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    let res;
+    try {
+      res = await fetch(relayUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw new Error('Timed out waiting for the RSVP relay');
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'RSVP relay error');
   }
 })();
