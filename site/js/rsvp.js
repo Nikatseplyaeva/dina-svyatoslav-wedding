@@ -46,7 +46,7 @@
     if (el) { e.preventDefault(); pickDish(el); }
   });
 
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener('submit', (e) => {
     e.preventDefault();
     if (!state.attend) {
       errorBox.hidden = false;
@@ -54,64 +54,14 @@
       return;
     }
 
-    const payload = {
-      name: form.elements.name.value.trim(),
-      attend: state.attend,
-      drinks: [...state.drinks],
-      dish: state.dish,
-      submittedAt: new Date().toISOString(),
-    };
-
-    submitBtn.disabled = true;
-    submitBtn.querySelector('.submit-btn__label').textContent = 'Отправляем…';
-
-    try {
-      await sendRsvp(payload);
-      form.hidden = true;
-      thanks.hidden = false;
-      thanks.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    } catch (err) {
-      errorBox.textContent = 'Не получилось отправить ответ. Попробуйте ещё раз или напишите Диночке в Telegram.';
-      errorBox.hidden = false;
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.querySelector('.submit-btn__label').textContent = 'Отправить ответ';
-    }
+    // Отправка ответов отключена — форма только показывает благодарность.
+    form.hidden = true;
+    thanks.hidden = false;
+    thanks.scrollIntoView({ block: 'start', behavior: 'smooth' });
   });
 
   resetBtn.addEventListener('click', () => {
     thanks.hidden = true;
     form.hidden = false;
   });
-
-  async function sendRsvp(payload) {
-    const relayUrl = window.RSVP_RELAY_URL;
-    if (!relayUrl || relayUrl.startsWith('PASTE_')) {
-      throw new Error('RSVP relay is not configured (see js/config.js)');
-    }
-
-    // Some guests' networks block api.telegram.org directly, so the actual
-    // Telegram delivery happens server-side in a Cloudflare Worker (see
-    // cloudflare-worker/README.md) — the guest's browser only needs to
-    // reach Cloudflare, which is far more consistently reachable.
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    let res;
-    try {
-      res = await fetch(relayUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify(payload),
-      });
-    } catch (err) {
-      if (err.name === 'AbortError') throw new Error('Timed out waiting for the RSVP relay');
-      throw err;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || 'RSVP relay error');
-  }
 })();
